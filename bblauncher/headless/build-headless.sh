@@ -36,7 +36,7 @@ javac --release 8 -nowarn -encoding UTF-8 -proc:full -cp "$CP:lib/lombok-$LOMBOK
 [ -d hmc/headlessmc-lwjgl/src/main/resources ] && cp -r hmc/headlessmc-lwjgl/src/main/resources/. classes/
 
 echo "relocating ASM"
-mkdir asm && (cd asm && for j in asm asm-tree asm-commons; do jar xf "../lib/$j-$ASM.jar"; done; rm -rf META-INF module-info.class)
+mkdir asm && (cd asm && for j in asm asm-tree; do jar xf "../lib/$j-$ASM.jar"; done; rm -rf META-INF module-info.class)
 cp -r asm/. classes/
 javac -nowarn -cp "$CP" -d reloc "$here/Relocate.java"
 java -cp "reloc:$CP" Relocate classes relocated
