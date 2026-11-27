@@ -29,10 +29,10 @@ done
 CP="lib/asm-$ASM.jar:lib/asm-tree-$ASM.jar:lib/asm-commons-$ASM.jar:lib/jspecify-$JSPECIFY.jar"
 
 echo "compiling"
-find hmc/headlessmc-lwjgl/src/main/java -name '*.java' > sources.txt
+# the launchwrapper/ classes only serve old Forge (LaunchWrapper) and need its jar; Fabric does not use them
+find hmc/headlessmc-lwjgl/src/main/java -name '*.java' ! -path '*/launchwrapper/*' > sources.txt
 javac --release 8 -nowarn -encoding UTF-8 -proc:full -cp "$CP:lib/lombok-$LOMBOK.jar" -processorpath "lib/lombok-$LOMBOK.jar" \
-  -d classes @sources.txt 2>&1 | grep -v '^warning\|^Note:' || true
-[ -d classes ] || { echo "compile failed"; exit 1; }
+  -d classes @sources.txt || { echo "compile failed"; exit 1; }
 [ -d hmc/headlessmc-lwjgl/src/main/resources ] && cp -r hmc/headlessmc-lwjgl/src/main/resources/. classes/
 
 echo "relocating ASM"
