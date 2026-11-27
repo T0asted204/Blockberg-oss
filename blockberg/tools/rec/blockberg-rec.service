@@ -1,0 +1,11 @@
+[Unit]
+Description=Blockberg price recorder (main): one candle per minute, 24/7, answers the standby
+After=network-online.target
+
+[Service]
+ExecStart=%h/.local/bin/blockberg-rec --listen @MAIN_RECORDER_ADDR@
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

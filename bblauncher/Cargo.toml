@@ -1,0 +1,17 @@
+[package]
+name = "bblauncher"
+version = "0.1.0"
+edition = "2021"
+description = "Blockberg launcher: Microsoft login, Minecraft/Fabric install, Modrinth mods, per-account instances"
+
+[dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+sha1 = "0.10"
+flate2 = "1"
+tar = "0.4"
+
+[profile.release]
+opt-level = 3

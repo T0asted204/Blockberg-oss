@@ -1,0 +1,95 @@
+from system.pyj.minescript import *
+Minecraft = JavaClass("net.minecraft.client.Minecraft")
+ContainerInput = JavaClass("net.minecraft.world.inventory.ContainerInput")
+ServerSocket = JavaClass("java.net.ServerSocket")
+InetAddress = JavaClass("java.net.InetAddress")
+System = JavaClass("java.lang.System")
+Character = JavaClass("java.lang.Character")
+CharacterEvent = JavaClass("net.minecraft.client.input.CharacterEvent")
+
+def type_text(scr, text):
+  # SignEditScreen.setMessage is private: this interpreter cannot call it ("Resolving method call ... setMessage()"), so each settext failed and the agent
+  # then did every click the slow way for 20 s. Typing the characters (charTyped is public) works: prices and amounts are only digits and a dot.
+  for ch in text:
+    code = 46 if ch == "." else 48 + int(ch)
+    scr.charTyped(CharacterEvent(code))
+
+_p = System.getenv("BB_FAST_PORT")
+PORT = int(str(_p)) if _p else 7779
+mc = Minecraft.getInstance()
+PICKUP = ContainerInput.PICKUP
+server = None
+# a helper killed by Minescript (a server hop) leaves its socket bound until the game exits, so take the first free port of the list the agent looks at
+for _port in [PORT] + [PORT + 2000 + 7 * _k for _k in range(40)]:
+  try:
+    server = ServerSocket(_port, 8, InetAddress.getByName("127.0.0.1"))
+    PORT = _port
+    break
+  except Exception as e:
+    server = None
+server.setSoTimeout(1)
+conns = []   # [socket, input stream, output stream, pending text]
+print("bb_fast listening on " + str(PORT))
+
+def reply(c, text):
+  c[2].write(JavaString(text + "\n").getBytes())
+  c[2].flush()
+
+def run_line(c, line):
+  parts = line.split(" ", 2)
+  op = parts[0]
+  t0 = System.nanoTime()
+  try:
+    if op == "ping":
+      reply(c, "pong")
+    elif op == "click":
+      slot = int(parts[1])
+      button = int(parts[2]) if len(parts) > 2 else 0
+      p = mc.player
+      mc.gameMode.handleContainerInput(p.containerMenu.containerId, slot, button, PICKUP, p)
+      reply(c, "ok " + str(int((System.nanoTime() - t0) / 1000)))
+    elif op == "close":
+      mc.player.closeContainer()
+      reply(c, "ok")
+    elif op == "sign":
+      scr = mc.screen
+      type_text(scr, parts[1] if len(parts) > 1 else "")
+      scr.onClose()
+      reply(c, "ok")
+    elif op == "settext":
+      type_text(mc.screen, parts[1] if len(parts) > 1 else "")
+      reply(c, "ok")
+    elif op == "done":
+      mc.screen.onClose()
+      reply(c, "ok")
+    elif op == "exit":
+      reply(c, "ok")
+      server.close()
+      exit(0)
+    elif op == "cid":
+      reply(c, "ok " + str(mc.player.containerMenu.containerId))
+    else:
+      reply(c, "err unknown op " + op)
+  except Exception as e:
+    reply(c, "err " + str(e))
+
+def poll():
+  try:
+    s = server.accept()
+    conns.append([s, s.getInputStream(), s.getOutputStream(), ""])
+  except Exception as e:
+    pass
+  for c in conns[:]:
+    try:
+      while c[1].available() > 0:
+        b = c[1].read()
+        if b == 10:
+          line = c[3]
+          c[3] = ""
+          run_line(c, line)
+        elif b >= 0:
+          c[3] = c[3] + chr(b)
+    except Exception as e:
+      conns.remove(c)
+
+set_interval(poll, 5)

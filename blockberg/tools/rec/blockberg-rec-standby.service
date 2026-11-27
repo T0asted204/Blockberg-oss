@@ -1,0 +1,12 @@
+[Unit]
+Description=Blockberg price recorder (standby): holds 10 minutes; takes over if the main recorder goes down, then merges back
+After=network-online.target
+
+[Service]
+Environment=BLOCKBERG_DATA=%h/.local/share/blockberg-standby
+ExecStart=%h/.local/bin/blockberg-rec --standby --peer @MAIN_RECORDER_ADDR@
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

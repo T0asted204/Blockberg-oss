@@ -1,0 +1,151 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+:root{--bg:#010202;--card:#111515;--hover:#182020;--border:#465350;--borderhi:#687672;--text:#e6ebe7;--strong:#fbfdf7;--dim:#b2bdb7;--muted:#7d8983;--accent:#83a5b3;--green:#089981;--red:#f23645;
+--font:'IBM Plex Mono','SF Mono','Cascadia Code','JetBrains Mono','DejaVu Sans Mono',monospace}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--font);overflow:hidden;user-select:none}
+#wrap{display:flex;flex-direction:column;height:100%}
+#bar{display:flex;gap:6px;padding:8px 8px 4px;align-items:center;flex-wrap:wrap}
+.btn{display:flex;align-items:center;gap:5px;background:rgba(2,3,3,.86);border:1px solid var(--border);color:var(--dim);font-family:var(--font);font-size:17px;padding:5px 11px;border-radius:5px;cursor:pointer;white-space:nowrap;position:relative;box-shadow:0 0 18px -18px #fff;transition:all .2s ease-in-out}
+.btn:hover{background:var(--hover);color:var(--text);border-color:var(--borderhi);box-shadow:0 0 18px -14px #ffa500}
+.btn:active{transform:scale(.95)}
+.exch{font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.5px}
+.sym{font-size:20px;font-weight:800;color:var(--strong)}
+.badge{font-size:14px;color:var(--dim);background:rgba(225,236,231,.18);border-radius:3px;padding:0 5px}
+.arrow{font-size:11px;opacity:.7}
+.menu{display:none;position:absolute;top:calc(100% + 4px);left:0;background:var(--card);border:1px solid var(--borderhi);border-radius:4px;box-shadow:0 8px 24px rgba(0,0,0,.8);min-width:160px;z-index:20;overflow:hidden}
+.menu.open{display:block}
+.opt{display:block;width:100%;text-align:left;background:none;border:0;color:var(--dim);font-family:var(--font);font-size:17px;padding:8px 14px;cursor:pointer}
+.opt{transition:all .2s ease-in-out}
+.opt:hover{background:var(--hover);color:var(--text)}
+.opt:active{transform:scale(.97)}
+.opt.active{color:var(--strong);background:rgba(131,165,179,.24)}
+#ohlc{display:flex;gap:10px;align-items:center;padding:0 12px 6px;font-size:17px;height:28px;white-space:nowrap}
+#ohlc .l{color:var(--muted)}#ohlc b{font-weight:600;color:var(--text)}
+#ohlc .h b{color:var(--green)}#ohlc .lo b{color:var(--red)}
+.up{color:var(--green)}.down{color:var(--red)}
+#chart{flex:1;min-height:0;position:relative;animation:fadein .35s ease-out}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+#empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:var(--muted);font-size:17px;pointer-events:none}
+</style></head>
+<body><div id="wrap">
+<div id="bar"></div>
+<div id="ohlc"></div>
+<div id="chart"><div id="empty">collecting candles…  (the recorder fills this in as time passes)</div></div>
+</div>
+<script>/*LWC*/</script>
+<script>
+const THEME={bg:'#010202',text:'#e6ebe7',grid:'rgba(225,236,231,0.11)',border:'#465350',crosshair:'#91a09a',green:'#089981',red:'#f23645'};
+const LWC=window.LightweightCharts;
+const el=document.getElementById('chart');
+const chart=LWC.createChart(el,{
+  layout:{background:{type:'solid',color:THEME.bg},textColor:THEME.text,fontFamily:"'IBM Plex Mono','DejaVu Sans Mono',monospace",fontSize:15},
+  grid:{vertLines:{color:THEME.grid,style:LWC.LineStyle.Solid},horzLines:{color:THEME.grid,style:LWC.LineStyle.Solid}},
+  crosshair:{mode:LWC.CrosshairMode.Normal,vertLine:{color:THEME.crosshair,width:1,style:LWC.LineStyle.Dashed,labelBackgroundColor:'#090b0b'},horzLine:{color:THEME.crosshair,width:1,style:LWC.LineStyle.Dashed,labelBackgroundColor:'#090b0b'}},
+  rightPriceScale:{borderColor:THEME.border,scaleMargins:{top:0.06,bottom:0.1},textColor:THEME.text},
+  leftPriceScale:{visible:false},
+  timeScale:{borderColor:THEME.border,timeVisible:true,secondsVisible:false,rightOffset:6,barSpacing:8,minBarSpacing:0.05,lockVisibleTimeRangeOnResize:true},
+  handleScroll:{mouseWheel:true,pressedMouseMove:true,horzTouchDrag:true},
+  handleScale:{mouseWheel:true,pinch:true,axisPressedMouseMove:{time:true,price:true},axisDoubleClickReset:{time:true,price:true}},
+  autoSize:true
+});
+const DASH=LWC.LineStyle.Dashed;
+const S={sym:'',ranges:[],tfs:[],rangeLabel:'1D',type:'candles',tfLabel:'5m',tfMin:5,seriesName:'Bid',seriesIdx:1,candles:[],ask:[],bid:[]};
+let main=null,askS=null,bidS=null,lastKey='',last=null;
+const TYPES=[['candles','Candles'],['hollow','Hollow candles'],['bars','Bars'],['line','Line (ask / bid)']];
+const SERIES=[[0,'Ask (insta-buy)'],[1,'Bid (insta-sell)'],[2,'Mid']];
+const post=(k,v)=>{try{window.ipc.postMessage(JSON.stringify({k,v}))}catch(e){}};
+
+function dd(label,items,cur,onpick,tip){
+  const b=document.createElement('div');b.className='btn';b.title=tip||'';
+  b.innerHTML='<span>'+label+'</span><span class="arrow">▾</span><div class="menu"></div>';
+  const m=b.querySelector('.menu');
+  items.forEach(([id,txt])=>{const o=document.createElement('button');o.className='opt'+(id===cur?' active':'');o.textContent=txt;
+    o.onclick=e=>{e.stopPropagation();closeAll();onpick(id);};m.appendChild(o);});
+  b.onclick=e=>{const open=m.classList.contains('open');closeAll();if(!open)m.classList.add('open');e.stopPropagation();};
+  return b;
+}
+function closeAll(){document.querySelectorAll('.menu.open').forEach(m=>m.classList.remove('open'));if(barPending){barPending=false;buildBar();barKey=[S.sym,S.type,S.rangeMin,S.rangeLabel,S.tfMin,S.tfLabel,S.seriesIdx].join('|');}}
+document.addEventListener('click',closeAll);
+
+function buildBar(){
+  const bar=document.getElementById('bar');bar.innerHTML='';
+  const sb=document.createElement('div');sb.className='btn';sb.title='The item on the chart and the candle size';
+  sb.innerHTML='<span class="exch">BAZAAR</span><span class="sym">'+S.sym+'</span><span class="badge">'+S.tfLabel+'</span>';
+  bar.appendChild(sb);
+  bar.appendChild(dd(S.rangeLabel,S.ranges.map(r=>[r[1],r[0]]),S.rangeMin,v=>post('range',v),'How far back the chart looks'));
+  bar.appendChild(dd((TYPES.find(t=>t[0]===S.type)||TYPES[0])[1],TYPES,S.type,v=>post('type',v),'How prices are drawn: candles, hollow candles, bars or ask/bid lines'));
+  bar.appendChild(dd(S.type==='line'&&S.tfMin>=0?'Tick':S.tfLabel,S.tfs.map(r=>[r[1],r[0]]),S.tfMin,v=>post('tf',v),'Time covered by one candle (Auto fits the range)'));
+  bar.appendChild(dd('Price: '+(SERIES.find(x=>x[0]===S.seriesIdx)||SERIES[1])[1].split(' ')[0],SERIES,S.seriesIdx,v=>post('series',v),'Which price the candles follow: Ask (insta-buy), Bid (insta-sell) or the middle'));
+  const rb=document.createElement('div');rb.className='btn';rb.textContent='⟲';rb.title='Reset view';
+  rb.onclick=()=>{chart.timeScale().fitContent();chart.priceScale('right').applyOptions({autoScale:true});};
+  bar.appendChild(rb);
+}
+
+function fmt(v){return v==null?'—':(Math.abs(v)>=1000?v.toFixed(1):v.toFixed(1));}
+function legend(d){
+  const o=document.getElementById('ohlc');
+  if(S.type==='line'){
+    const a=d&&d.ask!=null?d.ask:(S.ask.length?S.ask[S.ask.length-1].value:null);
+    const b=d&&d.bid!=null?d.bid:(S.bid.length?S.bid[S.bid.length-1].value:null);
+    o.innerHTML='<b style="color:var(--strong)">'+S.sym+'</b><span class="l">Ask</span><b class="up">'+fmt(a)+'</b><span class="l">Bid</span><b class="down">'+fmt(b)+'</b><span class="l">Sprd</span><b>'+(a!=null&&b!=null?fmt(a-b):'—')+'</b>';
+    return;
+  }
+  const c=d||S.candles[S.candles.length-1];
+  if(!c){o.innerHTML='';return;}
+  const chg=c.close-c.open,pct=c.open?chg/c.open*100:0,cls=chg>=0?'up':'down';
+  o.innerHTML='<b style="color:var(--strong)">'+S.sym+'</b><span class="l">O</span><b>'+fmt(c.open)+'</b><span class="h"><span class="l">H</span> <b>'+fmt(c.high)+'</b></span><span class="lo"><span class="l">L</span> <b>'+fmt(c.low)+'</b></span><span class="l">C</span><b>'+fmt(c.close)+'</b><span class="'+cls+'">'+(chg>=0?'+':'')+chg.toFixed(1)+' ('+(pct>=0?'+':'')+pct.toFixed(2)+'%)</span>';
+}
+chart.subscribeCrosshairMove(p=>{
+  if(!p.time||!p.seriesData){legend(null);return;}
+  if(S.type==='line'){legend({ask:(p.seriesData.get(askS)||{}).value,bid:(p.seriesData.get(bidS)||{}).value});return;}
+  const d=main&&p.seriesData.get(main);legend(d||null);
+});
+
+function mkSeries(){
+  if(main){chart.removeSeries(main);main=null;}
+  if(askS){chart.removeSeries(askS);askS=null;}
+  if(bidS){chart.removeSeries(bidS);bidS=null;}
+  const pl={priceLineVisible:true,priceLineColor:THEME.crosshair,priceLineStyle:DASH,lastValueVisible:true};
+  if(S.type==='line'){
+    askS=chart.addLineSeries({color:THEME.green,lineWidth:2,...pl,priceLineVisible:false});
+    bidS=chart.addLineSeries({color:THEME.red,lineWidth:2,...pl,priceLineVisible:false});
+  }else if(S.type==='bars'){
+    main=chart.addBarSeries({upColor:THEME.green,downColor:THEME.red,thinBars:true,...pl});
+  }else{
+    const hollow=S.type==='hollow';
+    main=chart.addCandlestickSeries({upColor:hollow?'transparent':THEME.green,downColor:THEME.red,borderUpColor:THEME.green,borderDownColor:THEME.red,wickUpColor:THEME.green,wickDownColor:THEME.red,...pl});
+  }
+}
+function apply(first){
+  const key=S.type+'|'+S.sym;
+  if(key!==lastKey){mkSeries();lastKey=key;first=true;}
+  if(S.type==='line'){askS.setData(S.ask);bidS.setData(S.bid);}
+  else main.setData(S.candles);
+  document.getElementById('empty').style.display=(S.type!=='line'&&!S.candles.length)?'flex':'none';
+  chart.applyOptions({timeScale:{secondsVisible:S.tfMin<0}});
+  if(first){
+    // second candles: show the last ~2 minutes of bars (fitting hours of 1 s bars makes them invisible), then keep following the newest
+    if(S.tfMin<0&&(S.type==='line'?S.ask.length:S.candles.length)>150){const n=S.type==='line'?S.ask.length:S.candles.length;chart.timeScale().setVisibleLogicalRange({from:n-Math.max(60,Math.round(7200/(-S.tfMin*60))),to:n+4});}
+    else chart.timeScale().fitContent();
+  }
+  // second sizes: keep the newest bar in view as bars arrive (unless the user has scrolled back to look at older ones)
+  else if(S.tfMin<0){const ts=chart.timeScale();if(ts.scrollPosition()>-3)ts.scrollToRealTime();}
+  legend(null);
+}
+let viewKey='',barKey='',barPending=false;
+window.bb={set(p){if(!p||!p.sym)return;try{
+  // redraw the toolbar whenever anything it shows differs from what is drawn
+  const lk=x=>[x.sym,x.type,x.rangeMin,x.rangeLabel,x.tfMin,x.tfLabel,x.seriesIdx].join('|');
+  const rebuild=lk(p)!==barKey;
+  Object.assign(S,p);
+  // never redraw the toolbar under an open menu (the click would land on nothing): wait until it closes
+  if(rebuild||!document.getElementById('bar').children.length){if(document.querySelector('.menu.open'))barPending=true;else{buildBar();barKey=lk(S);}}
+  const vk=p.sym+'|'+p.type+'|'+p.rangeMin+'|'+p.tfMin+'|'+p.seriesIdx;
+  const first=vk!==viewKey;viewKey=vk;
+  apply(first);
+}catch(err){console.error(err);}}};
+post('ready',1);
+</script></body></html>

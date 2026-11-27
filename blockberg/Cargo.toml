@@ -1,0 +1,32 @@
+[package]
+name = "blockberg"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+eframe = "0.31"
+egui_extras = "0.31"
+egui_plot = "0.31"
+image = { version = "0.25", default-features = false, features = ["png"] }
+wry = "0.51"
+gtk = "0.18"
+raw-window-handle = "0.6"
+
+[[bin]]
+name = "blockberg"
+path = "src/main.rs"
+
+[[bin]]
+name = "blockberg-gui"
+path = "src/bin/gui.rs"
+
+[[bin]]
+name = "blockberg-rec"
+path = "src/bin/rec.rs"

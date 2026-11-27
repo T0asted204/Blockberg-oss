@@ -1,0 +1,13 @@
+[Unit]
+Description=BBlauncher: headless Minecraft with a Blockberg agent (%i)
+After=network-online.target
+
+[Service]
+# %i is "name-port", e.g. alt1-7787
+ExecStart=@BBLAUNCHER_DIR@/agent-unit.sh %i
+Restart=always
+RestartSec=20
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

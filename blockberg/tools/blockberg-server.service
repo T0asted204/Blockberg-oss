@@ -1,0 +1,17 @@
+[Unit]
+Description=Blockberg server (the engine: iceberg jobs, claims, agent link, journal)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# the project's own release build; rebuilding it never disturbs the running server (use "Restart server" in the app to load it)
+ExecStart=@BLOCKBERG_DIR@/target/release/blockberg-gui --server
+Restart=always
+RestartSec=2
+# the agent's address defaults to 127.0.0.1:7777; set it here if the agent runs on another machine:
+# Environment=BLOCKBERG_AGENT=HOST:7777
+Nice=5
+
+[Install]
+WantedBy=default.target

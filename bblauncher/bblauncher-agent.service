@@ -1,0 +1,12 @@
+[Unit]
+Description=BBlauncher: headless Minecraft with the Blockberg agent
+After=network-online.target
+
+[Service]
+ExecStart=@BBLAUNCHER_DIR@/agent-supervisor.sh
+Restart=always
+RestartSec=20
+KillMode=control-group
+
+[Install]
+WantedBy=default.target
